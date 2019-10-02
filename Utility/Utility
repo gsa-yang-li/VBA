@@ -1226,6 +1226,7 @@ Function getFolderName(strDefaultDir As String) As String
     getFolderName = sItem
     Set fldr = Nothing
 End Function
+'/*this section was udpated on 20191001
 ' check whether code name exists in the wb
 Function codename_exists(wb As Workbook, strCodeName As String) As Boolean
     Dim ws As Worksheet
@@ -1346,3 +1347,4 @@ Function Array_has_element(var As Variant) As Boolean
     Array_has_element = True
         
 End Function
+'this section was udpated on 20191001 */
