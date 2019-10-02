@@ -1,0 +1,1347 @@
+
+' populate the blank cells with value from the top adjacent cells
+Sub AutoCopy_TopToBottom(rg As Range)
+On Error Resume Next
+Dim MyCell As Range, nCounter(1 To 4) As Integer, i As Integer
+nCounter(1) = rg.Columns.Count
+nCounter(2) = 0
+
+'Debug.Print rg.Rows.Count
+' Debug.Print rg.Columns.Count
+' data validation
+For Each MyCell In rg
+    'Debug.Print myCell.Address
+    nCounter(2) = nCounter(2) + 1
+    If nCounter(2) > nCounter(1) Then
+        If IsEmpty(MyCell.Value) Then
+            If Not IsEmpty(MyCell.Offset(-1, 0).Value) Then
+                MyCell.Value = MyCell.Offset(-1, 0).Value
+            End If
+        End If
+    End If
+Next
+
+End Sub
+
+' can extract comments
+' need to create a separate tab to capture the output
+Sub Extract_comments()
+Dim rg1 As Range, rg2 As Range, rg0 As Range
+Dim ws1 As Worksheet, ws2 As Worksheet
+
+Set ws1 = ActiveWorkbook.Worksheets(1)
+Set ws2 = ActiveWorkbook.Worksheets(2)
+
+
+Set rg1 = ws1.UsedRange.SpecialCells(xlCellTypeComments)
+
+For Each rg0 In rg1
+    Set rg2 = ws2.Range("a1").SpecialCells(xlCellTypeLastCell)
+    Set rg2 = ws2.Cells(rg2.Row + 1, 1)
+    rg2.Value = rg0.Value
+    rg2.Offset(0, 1).Value = rg0.Comment.Text
+Next
+
+End Sub
+
+
+Sub update_MultiPage_Textbox(myForm As UserForm, Optional myComments As String)
+    On Error GoTo myErrorHandler1
+    
+    Dim cfg As clsConfig, strNo As String, txtBox As Control, strRef As String
+    Set cfg = New clsConfig
+    
+    ' identify current page # on multipage
+    strNo = CStr(myForm.MultiPage1.Value)
+    ' update config file with textbox
+    With cfg
+        strRef = strMULTIPAGE_PAGE & strNo & "_" & strTextBox & strNo
+        .letConfigInfo strRef, myForm.Controls.Item(strTextBox & strNo).Text, myComments
+    End With
+    
+Exit Sub
+myErrorHandler1:
+
+    MsgBox "Error " & Err.Number & ": " & Err.Description & vbCrLf & " Caller: " & Application.VBE.ActiveCodePane.CodeModule, vbCritical, "Error"
+    
+    ' clean up the object
+    Set cfg = Nothing
+End Sub
+
+Sub populate_MultiPage_Textbox(myForm As UserForm)
+    On Error GoTo myErrorHandler1
+    Dim cfg As clsConfig, strNo As String, txtBox As Control, strRef As String
+    Set cfg = New clsConfig
+    
+    ' populate the text box for the page
+    With cfg
+        strNo = CStr(.getConfigInfo(MAINMULTIPAGENO))
+        strRef = strTextBox & strNo
+        
+        ' populate textbox if available
+        Set txtBox = myForm.Controls.Item(strRef)
+            
+        strRef = strMULTIPAGE_PAGE & strNo & "_" & strTextBox & strNo
+        txtBox.Text = .getConfigInfo(strRef)
+
+    End With
+    
+    ' clean up the object
+    Set cfg = Nothing
+
+    
+Exit Sub
+myErrorHandler1:
+
+    MsgBox "Error " & Err.Number & ": " & Err.Description & vbCrLf & " Caller: " & Application.VBE.ActiveCodePane.CodeModule, vbCritical, "Error"
+    
+    ' clean up the object
+    Set cfg = Nothing
+
+End Sub
+
+Function totalCellNoandSum(rgTemp As Range, strOutput As String) As Double
+    Dim varOption As Variant, i As Long, strMsg As String
+    
+    varOption = Array("total Cell No", "Total Sum")
+    
+    
+    Select Case True
+        Case StrComp(strOutput, varOption(0), vbTextCompare) = 0
+            totalCellNoandSum = rgTemp.Cells.SpecialCells(xlCellTypeConstants).Count
+        Case StrComp(strOutput, varOption(1), vbTextCompare) = 0
+            totalCellNoandSum = Round(Application.WorksheetFunction.Sum(rgTemp), 2)
+        Case Else
+            For i = LBound(varOption) To UBound(varOption)
+                strMsg = strMsg & vbCrLf & varOption(i) & "; "
+            Next
+            MsgBox "Try again, valid options are : " & strMsg
+    End Select
+    
+End Function
+
+
+' delete content of all used range on a worksheet
+Sub deleteRangeOnWorksheet(wsInput As Worksheet, Optional MyOption As String)
+    Dim rgTemp As Range, lngCount As Long, varOption As Variant, i As Long, strMsg As String
+    
+    varOption = Array("include header row", "exclude header row")
+    
+    ' select the used range
+        Set rgTemp = wsInput.UsedRange
+    lngCount = rgTemp.Rows.Count
+    
+    
+    Select Case True
+        ' delete the entire range, default behavior
+        Case StrComp(MyOption, varOption(0), vbTextCompare) = 0 Or Len(MyOption) = 0
+            rgTemp.Delete
+        ' delete the range, except for the header
+        Case StrComp(MyOption, varOption(1), vbTextCompare) = 0
+            If lngCount > 1 Then
+                rgTemp.Offset(1, 0).Resize(lngCount - 1).Delete
+            End If
+        Case Else
+            For i = LBound(varOption) To UBound(varOption)
+                strMsg = strMsg & vbCrLf & varOption(i) & "; "
+            Next
+            MsgBox "Try again, valid options are : " & strMsg
+            Stop
+            Resume
+    End Select
+End Sub
+
+' goes to the last cell of the range and add, if possible
+Function gotoLastCellandAdd(rgInput As Range, Optional MyOption As String) As Range
+    On Error GoTo myErrorHandler1
+    Dim rgCurrent As Range, varOption As Variant, i As Long, strMsg As String
+    
+    varOption = Array("up", "down", "left", "right")
+    
+    Static MINNO As Long, MAXROWNO As Long, MAXCOLNO As Long
+    
+    MINNO = 1
+    MAXROWNO = 1048576
+    MAXCOLNO = 16384
+    
+    Select Case True
+        Case StrComp(MyOption, varOption(0), vbBinaryCompare) = 0
+            ' go up
+            Set rgCurrent = rgInput.End(xlUp)
+            ' add a cell
+            Select Case True
+                Case rgInput.Row = MINNO
+                    Err.Raise 999
+                Case rgInput.Row <> MINNO And IsEmpty(rgInput.Offset(-1, 0))
+                    Set gotoLastCellandAdd = rgInput.Offset(-1, 0)
+                Case rgCurrent.Row = MINNO And IsEmpty(rgCurrent)
+                    Set gotoLastCellandAdd = rgInput.Offset(-1, 0)
+                Case Else
+                    Set gotoLastCellandAdd = rgCurrent.Offset(-1, 0)
+            End Select
+        Case StrComp(MyOption, varOption(1), vbBinaryCompare) = 0 Or Len(MyOption) = 0
+            ' go down and default behavior
+                Set rgCurrent = rgInput.End(xlDown)
+                Debug.Print rgCurrent.Address
+                ' add a cell
+                Select Case True
+                    Case rgInput.Row = MAXROWNO
+                        Err.Raise 999
+                    Case rgInput.Row <> MAXROWNO And IsEmpty(rgInput.Offset(1, 0))
+                        Set gotoLastCellandAdd = rgInput.Offset(1, 0)
+                    Case rgCurrent.Row = MAXROWNO And IsEmpty(rgCurrent)
+                        Set gotoLastCellandAdd = rgInput.Offset(1, 0)
+                    Case Else
+                        Set gotoLastCellandAdd = rgCurrent.Offset(1, 0)
+                End Select
+        Case StrComp(MyOption, varOption(2), vbBinaryCompare) = 0
+            ' go left
+            Set rgCurrent = rgInput.End(xlToLeft)
+            ' add a cell
+            Select Case True
+                Case rgInput.Column = MINNO
+                    Err.Raise 999
+                Case rgInput.Column <> MINNO And IsEmpty(rgInput.Offset(0, -1))
+                    Set gotoLastCellandAdd = rgInput.Offset(0, -1)
+                Case rgCurrent.Column = MINNO And IsEmpty(rgCurrent)
+                    Set gotoLastCellandAdd = rgInput.Offset(0, -1)
+                Case Else
+                    Set gotoLastCellandAdd = rgCurrent.Offset(0, -1)
+            End Select
+        Case StrComp(MyOption, varOption(3), vbBinaryCompare) = 0
+            ' go right
+            Set rgCurrent = rgInput.End(xlToRight)
+            ' add a cell
+            Select Case True
+                Case rgInput.Column = MAXCOLNO
+                    Err.Raise 999
+                Case rgInput.Column <> MAXCOLNO And IsEmpty(rgInput.Offset(0, 1))
+                    Set gotoLastCellandAdd = rgInput.Offset(0, 1)
+                Case rgCurrent.Column = MAXCOLNO And IsEmpty(rgCurrent)
+                    Set gotoLastCellandAdd = rgInput.Offset(0, 1)
+                Case Else
+                    Set gotoLastCellandAdd = rgCurrent.Offset(0, 1)
+            End Select
+        Case Else
+            Set gotoLastCellandAdd = rgInput
+            For i = LBound(varOption) To UBound(varOption)
+                strMsg = strMsg & vbCrLf & varOption(i) & "; "
+            Next
+            MsgBox "Try again, valid options are : " & strMsg
+            Exit Function
+    End Select
+            
+Exit Function
+myErrorHandler1:
+    Set gotoLastCellandAdd = rgInput
+    MsgBox "Reaching the end of range, no cell can be added" & vbCrLf & vbCrLf _
+    & "Error " & Err.Number & ": " & Err.Description & vbCrLf & " Caller: " & Application.VBE.ActiveCodePane.CodeModule, vbCritical, "Error"
+                
+End Function
+' goes to the last cell of the range
+Function gotoLastCell(rgInput As Range, Optional MyOption As String) As Range
+    On Error GoTo myErrorHandler1
+    Dim rgCurrent As Range, varOption As Variant, i As Long, strMsg As String
+    
+    varOption = Array("up", "down", "left", "right")
+    
+    Static MINNO As Long, MAXROWNO As Long, MAXCOLNO As Long
+    
+    MINNO = 1
+    MAXROWNO = 1048576
+    MAXCOLNO = 16384
+    
+    Select Case True
+        Case StrComp(MyOption, varOption(0), vbBinaryCompare) = 0
+            ' go up
+            Set rgCurrent = rgInput.End(xlUp)
+            ' last cell
+            Select Case True
+                Case rgInput.Row = MINNO
+                    Set gotoLastCell = rgInput
+                Case rgInput.Row <> MINNO And IsEmpty(rgInput.Offset(-1, 0))
+                    Set gotoLastCell = rgInput
+                Case rgCurrent.Row = MINNO And IsEmpty(rgCurrent)
+                    Set gotoLastCell = rgInput
+                Case Else
+                    Set gotoLastCell = rgCurrent
+            End Select
+        Case StrComp(MyOption, varOption(1), vbBinaryCompare) = 0 Or Len(MyOption) = 0
+            ' go down and default behavior
+                ' if next cell is not empty, then reach to the end of current range
+                Set rgCurrent = rgInput.End(xlDown)
+                'Debug.Print rgCurrent.Address
+                ' go to last cell
+                Select Case True
+                    Case rgInput.Row = MAXROWNO
+                        Set gotoLastCell = rgInput
+                    Case rgInput.Row <> MAXROWNO And IsEmpty(rgInput.Offset(1, 0))
+                        Set gotoLastCell = rgInput
+                    Case rgCurrent.Row = MAXROWNO And IsEmpty(rgCurrent)
+                        Set gotoLastCell = rgInput
+                    Case Else
+                        Set gotoLastCell = rgCurrent
+                End Select
+        Case StrComp(MyOption, varOption(2), vbBinaryCompare) = 0
+            ' go left
+            Set rgCurrent = rgInput.End(xlToLeft)
+            ' add a cell
+            Select Case True
+                Case rgInput.Column = MINNO
+                    Set gotoLastCell = rgInput
+                Case rgInput.Column <> MINNO And IsEmpty(rgInput.Offset(0, -1))
+                    Set gotoLastCell = rgInput
+                Case rgCurrent.Column = MINNO And IsEmpty(rgCurrent)
+                    Set gotoLastCell = rgInput
+                Case Else
+                    Set gotoLastCell = rgCurrent
+            End Select
+        Case StrComp(MyOption, varOption(3), vbBinaryCompare) = 0
+            ' go right
+            Set rgCurrent = rgInput.End(xlToRight)
+            ' add a cell
+            Select Case True
+                Case rgInput.Column = MAXCOLNO
+                    Set gotoLastCell = rgInput
+                Case rgInput.Column <> MAXCOLNO And IsEmpty(rgInput.Offset(0, 1))
+                    Set gotoLastCell = rgInput
+                Case rgCurrent.Column = MAXCOLNO And IsEmpty(rgCurrent)
+                    Set gotoLastCell = rgInput
+                Case Else
+                    Set gotoLastCell = rgCurrent
+            End Select
+        Case Else
+            Set gotoLastCell = rgInput
+            For i = LBound(varOption) To UBound(varOption)
+                strMsg = strMsg & vbCrLf & varOption(i) & "; "
+            Next
+            MsgBox "Try again, valid options are : " & strMsg
+            Exit Function
+    End Select
+            
+Exit Function
+myErrorHandler1:
+    Set gotoLastCell = rgInput
+    MsgBox "Reaching the end of range, no cell can be added" & vbCrLf & vbCrLf _
+    & "Error " & Err.Number & ": " & Err.Description & vbCrLf & " Caller: " & Application.VBE.ActiveCodePane.CodeModule, vbCritical, "Error"
+                
+End Function
+' pick worksheet by codename
+Function setWorksheetByCodeName(wbTemp As Workbook, strCodeName As String) As Worksheet
+    Dim ws As Worksheet, i As Long
+        i = 0
+        For Each ws In wbTemp.Worksheets
+            If StrComp(ws.CodeName, strCodeName, vbTextCompare) = 0 Then
+                i = i + 1
+                Set setWorksheetByCodeName = ws
+                Exit For
+            End If
+        Next
+        ' if no code name is found
+        If i = 0 Then
+            MsgBox "The code name doesn't exist, try again"
+        End If
+        
+End Function
+
+Function setLastCellofRange(rgInput As Range, Optional MyOption As String) As Range
+    Dim rgCurrent As Range, varOption As Variant, i As Long, strMsg As String
+    Dim lngRowEnd As Long, lngColEnd As Long
+    
+    lngRowEnd = 1
+    lngColEnd = 1
+    
+    varOption = Array("lower left", "lower right", "upper left", "upper right")
+
+    
+    Select Case True
+        ' go to lower left
+        Case StrComp(MyOption, varOption(0), vbTextCompare) = 0 Or Len(MyOption) = 0
+            set rg
+            
+            Set setLastCellofRange = rgCurrent.Offset(0, -(rgCurrent.Column - 1))
+        ' go to lower right
+        Case StrComp(MyOption, varOption(1), vbTextCompare) = 0
+            Set setLastCellofRange = rgCurrent
+        ' go to upper left
+        Case StrComp(MyOption, varOption(2), vbTextCompare) = 0
+            Set setLastCellofRange = rgCurrent.Offset(-(rgCurrent.Row - 1), -(rgCurrent.Column - 1))
+        ' go to upper right
+        Case StrComp(MyOption, varOption(3), vbTextCompare) = 0
+            Set setLastCellofRange = rgCurrent.Offset(-(rgCurrent.Row - 1), 0)
+        Case Else
+            Set setLastCellofRange = rgInput
+            For i = LBound(varOption) To UBound(varOption)
+                strMsg = strMsg & vbCrLf & varOption(i) & "; "
+            Next
+            MsgBox "Try again, valid options are : " & strMsg
+            Exit Function
+    End Select
+End Function
+Sub deleteRange_Below_Right(rgInput As Range)
+    Dim rgToBeDeleted As Range
+    'rgInput.Parent.Select
+    'Debug.Print rgInput.Address
+    ' set up range to be deleted
+    Set rgToBeDeleted = rgInput.Parent.Range(rgInput, rgInput.Cells.SpecialCells(xlCellTypeLastCell))
+    'Debug.Print rgToBeDeleted.Address
+    ' delete range
+    rgToBeDeleted.Clear
+End Sub
+
+
+'**************************************
+'*   Utility: Folder/file related
+'**************************************
+Sub InsertWorksheet(wbWorkBook As Workbook, intPrecedingWorksheetNo As Integer, strWorksheetName As String)
+' add a worksheet at the end
+wbWorkBook.Worksheets.Add after:=wbWorkBook.Worksheets(intPrecedingWorksheetNo)
+' name the new worksheet
+wbWorkBook.Worksheets(wbWorkBook.Worksheets.Count).Name = strWorksheetName
+End Sub
+Function WorksheetExists(wbCurrent As Workbook, strTabName As String) As Boolean
+Dim strName As String
+On Error GoTo errorstatement1
+strName = wbCurrent.Sheets(strTabName).Name
+WorksheetExists = True
+Exit Function
+errorstatement1:
+WorksheetExists = False
+End Function
+
+Function FolderOrFileExists(strFolderOrFileName As String, strOption As String) As Boolean
+Dim objFileSystem As Object
+
+' set up file system object
+Set objFileSystem = CreateObject("Scripting.FileSystemObject")
+
+' return true/false per option
+Select Case UCase(strOption)
+    ' evaluate folder, full path name is needed
+    Case UCase("folder")
+        FolderOrFileExists = objFileSystem.FolderExists(strFolderOrFileName)
+    ' evaluate file, full path name and file name are needed
+    Case UCase("file")
+        FolderOrFileExists = objFileSystem.FileExists(strFolderOrFileName)
+    Case Else
+    MsgBox "This type of option is not valid, please try again (options:folder/file)"
+
+End Select
+
+End Function
+Function NormalizeFolderPathName(strFolderPathName As String)
+' Truncate all value of "\"
+Do Until Right(strFolderPathName, 1) <> Chr(92)
+    strFolderPathName = Left(strFolderPathName, Len(strFolderPathName) - 1)
+Loop
+' return normalized value
+NormalizeFolderPathName = strFolderPathName
+End Function
+
+Function IsFileOpen(strFileName As String) As Boolean
+Dim wbCurrent As Workbook
+
+' loop through all the open workbooks
+For Each wbCurrent In Workbooks
+    ' if file is open then return True and exit
+    If StrComp(wbCurrent.Name, strFileName, vbTextCompare) = 0 Then
+        IsFileOpen = True
+        Exit For
+    ' else return False
+    Else
+        IsFileOpen = False
+    End If
+Next
+
+End Function
+Function HasPivotTable(wscurrent As Worksheet) As Boolean
+' check the existence of pivot table
+If wscurrent.PivotTables.Count = 0 Then
+    ' return False if does not exist
+    HasPivotTable = False
+Else
+    ' return True if exists
+    HasPivotTable = True
+End If
+End Function
+Function PivotTableExists(wscurrent As Worksheets, pvtCurrent As PivotTable) As Boolean
+Dim pvtDecider As PivotTable
+' check the existence of pivot table
+For Each pvtDecider In wscurrent.PivotTables
+    ' return True if exists
+    If StrComp(pvtDecider.Name, pvtCurrent.Name, vbTextCompare) = 0 Then
+        PivotTablesExist = True
+        Exit Function
+    End If
+Next
+' return False if does not exist
+PivotTableExists = False
+End Function
+Function PivotTableFieldNameExists(pvtCurrent As PivotTable, strFieldName As String) As Boolean
+Dim pvtfldCurrent As PivotField
+
+' check the existence of pivot table field
+For Each pvtfldCurrent In pvtCurrent.PivotFields
+    If StrComp(strFieldName, pvtfldCurrent.Name, vbTextCompare) = 0 Then
+        ' return True if exists
+        PivotTableFieldNameExists = True
+        Exit Function
+    End If
+Next
+
+' return False if does not exist
+PivotTableFieldNameExists = False
+
+End Function
+Function PivotTablePageFieldNameExists(pvtCurrent As PivotTable, strFieldName As String) As Boolean
+Dim pvtfldCurrent As PivotField
+
+' check the existence of pivot table field
+For Each pvtfldCurrent In pvtCurrent.PageFields
+    If StrComp(strFieldName, pvtfldCurrent.Name, vbTextCompare) = 0 Then
+        ' return True if exists
+        PivotTablePageFieldNameExists = True
+        Exit Function
+    End If
+Next
+
+' return False if does not exist
+PivotTablePageFieldNameExists = False
+
+End Function
+
+' new function
+Function PivotItemNameExists(pvtfld As PivotField, strPvtItemName As String) As Boolean
+    Dim pvtItem As PivotItem
+    
+    ' check the existence of pivot table field
+    For Each pvtItem In pvtfld.PivotItems
+        If StrComp(strPvtItemName, pvtItem.Name, vbTextCompare) = 0 Then
+            ' return True if exists
+            PivotItemNameExists = True
+            Exit Function
+        End If
+    Next
+    
+    ' return False if does not exist
+    PivotItemNameExists = False
+
+End Function
+
+' new function
+Function PivotItemValueExists(pvtfldCurrent As PivotField, varPivotItemValue As Variant)
+Dim pvtitmCurrent As PivotItem, varValueToBeChecked As Variant
+' check the data type of input value
+If varType(varPivotItemValue) <> vbString Then
+    varPivotItemValue = CStr(varPivotItemValue)
+End If
+
+For Each pvtitmCurrent In pvtfldCurrent.PivotItems
+    ' check the data type of pivot items
+    'if not is text,then convert
+    If varType(pvtitmCurrent.Value) <> vbString Then
+        varValueToBeChecked = CStr(pvtitmCurrent.Value)
+    'ok if is text
+    Else
+        varValueToBeChecked = pvtitmCurrent.Value
+    End If
+    
+    ' matching the input value aginst pivot item value
+    If StrComp(varPivotItemValue, varValueToBeChecked, vbTextCompare) = 0 Then
+        ' return True if exists
+        PivotItemValueExists = True
+        Exit Function
+    End If
+Next
+
+' return False if does not exist
+PivotItemValueExists = False
+
+End Function
+' new function
+Function rangeSetOperationValid(rg1 As Range, rg2 As Range, strSetMode As String) As Boolean
+    On Error GoTo myErrHandler1
+
+    Dim varSetMode As Variant, rgAll As Range
+    Dim strMsg As String
+    Dim blnTF As Boolean
+    
+    varSetMode = Array("union", "intersect")
+
+    ' check parameter 1
+    blnTF = False
+    For j = LBound(varSetMode) To UBound(varSetMode)
+        If StrComp(strSetMode, varSetMode(j), 1) = 0 Then
+           blnTF = True
+           Exit For
+        End If
+    Next
+    If blnTF = False Then
+        For i = LBound(varSetMode) To UBound(varSetMode)
+            strMsg = strMsg & vbCrLf & varSetMode(j) & "; "
+        Next
+        MsgBox "Try again, valid options are : " & strMsg
+        Exit Function
+    End If
+    
+    
+    ' for each row range by pvt fld
+    Select Case True
+        ' set mode, union
+        Case StrComp(strSetMode, varSetMode(0), vbTextCompare) = 0
+            Set rgAll = Union(rg1, rg2)
+        ' set mode, intersect
+        Case StrComp(strSetMode, varSetMode(1), vbTextCompare) = 0
+            Set rgAll = Intersect(rg1, rg2)
+    End Select
+    
+    ' if range operation is valid, returns true,else, false
+    If rgAll Is Nothing Then
+        rangeSetOperationValid = False
+        MsgBox "The following two range obgjects: " & vbCrLf & "1. " & rg1.Address & vbCrLf _
+        & "2. " & rg2.Address & vbCrLf & " are not compatible for range set opertions, double check and try again."
+    Else
+        rangeSetOperationValid = True
+    End If
+Exit Function
+myErrHandler1:
+    MsgBox "Please call sys admin for details"
+End Function
+' new function
+Function isNoOfElementsTheSame(var1 As Variant, var2 As Variant) As Boolean
+    Select Case True
+        Case UBound(var1) = UBound(var2)
+            isNoOfElementsTheSame = True
+        Case UBound(var1) <> UBound(var2)
+            isNoOfElementsTheSame = False
+        Case eles
+            MsgBox "The input needs to be arrays, check and try again"
+            Exit Function
+    End Select
+End Function
+
+Sub UpdatePivotTableCurrentPage(pvtfldCurrent As PivotField, varPivotFieldValue As Variant, intCurrentReportSuiteNo As Integer, intCurrentReportNo As Integer)
+' if this page field exists and has this value
+If PivotTablePageFieldNameExists(pvtfldCurrent.Parent, pvtfldCurrent.Name) Then
+    ' if the pivot item exists
+    If PivotItemValueExists(pvtfldCurrent, varPivotFieldValue) Then
+        ' refresh the report page field
+        With pvtfldCurrent
+            .CurrentPage = varPivotFieldValue
+        End With
+    Else
+        ' Return error message
+        MsgBox "Pivot item:""" & varPivotFieldValue & """ does not exist for " & _
+        pvtfldCurrent.Name & " on " & _
+        pvtfldCurrent.Parent.Name & "." & vbCrLf & vbCrLf & _
+        "For report suite no " & intCurrentReportSuiteNo & " and report no " & intCurrentReportNo & vbCrLf & vbCrLf & _
+        "Process will be halted."
+        End
+    End If
+' if this page field does not exist
+Else
+    ' Return error message
+    MsgBox "Pivot page field:""" & pvtfldCurrent.Name & """ does not exist for " & _
+    pvtfldCurrent.Parent.Name & " on " & _
+    pvtfldCurrent.Parent.Name & "." & vbCrLf & vbCrLf & _
+    "For report suite no " & intCurrentReportSuiteNo & " and report no " & intCurrentReportNo & vbCrLf & vbCrLf & _
+    "Process will be halted."
+    End
+End If
+End Sub
+Sub ChangePivotFieldItemVisibility(pvtfldCurrent As PivotField, intPivotItemNo As Integer, blTrueFalse As Boolean)
+' change the visibility setting
+pvtfldCurrent.PivotItems(intPivotItemNo).Visible = blTrueFalse
+'Debug.Print pvtfldCurrent.PivotItems(intPivotItemNo).Name & "=" & _
+pvtfldCurrent.PivotItems(intPivotItemNo).Visible
+End Sub
+Sub SettingTab_Protect()
+Dim mySetting As Setting
+Set mySetting = New Setting
+With mySetting
+    ThisWorkbook.Worksheets("Setting").Protect Password:="pmo6120"
+End With
+End Sub
+Sub SettingTab_Unprotect()
+Dim mySetting As Setting
+Set mySetting = New Setting
+With mySetting
+    ThisWorkbook.Worksheets("Setting").Unprotect Password:="pmo6120"
+End With
+End Sub
+Sub ControlTab_Protect()
+Dim mySetting As Setting
+Set mySetting = New Setting
+' customized password for control/setting tabs, reserved for system admin
+With mySetting
+    .wsControlTab.Protect Password:="pmo6120"
+End With
+End Sub
+Sub ControlTab_Unprotect()
+Dim mySetting As Setting
+Set mySetting = New Setting
+With mySetting
+    .wsControlTab.Unprotect Password:="pmo6120"
+End With
+End Sub
+
+Sub ToggleLogicalValue_SettingTab(strSettingName As String)
+' toggle the setting value from one to another
+' for Yes to No, etc.
+Dim mySetting As Setting
+Set mySetting = New Setting
+' customized password for control/setting tabs, reserved for system admin
+With mySetting
+    Call SettingTab_Unprotect
+    Select Case UCase(.Item(strSettingName).Value)
+        ' toggle from Yes to No
+        Case UCase("yes")
+            .Item(strSettingName).Value = UCase("no")
+        ' toggle from No to Yes
+        Case UCase("no")
+            .Item(strSettingName).Value = UCase("Yes")
+        ' toggle from True to False
+        Case UCase("true")
+            .Item(strSettingName).Value = UCase("false")
+        ' toggle from False to True
+        Case UCase("false")
+            .Item(strSettingName).Value = UCase("True")
+        Case Else
+            MsgBox "This function only works on logical values: Yes/No, True/False. Please retry."
+    End Select
+    Call SettingTab_Protect
+End With
+End Sub
+Sub UpdateSettingValue_SettingTab(strSettingName As String, varNewSettingValue As Variant)
+' update the setting value from one to another
+Dim mySetting As Setting
+Set mySetting = New Setting
+
+If varType(strSettingName) = vbString Then
+    With mySetting
+        Call SettingTab_Unprotect
+        .Item(strSettingName).Value = varNewSettingValue
+        Call SettingTab_Protect
+    End With
+Else
+    MsgBox "The data type for setting field name must be of ""String"", please try again."
+End If
+End Sub
+
+Function ConvertLogicalValueToBoolean(strLogicalValue As Variant) As Boolean
+Select Case UCase(strLogicalValue)
+    ' convert to True if value is Yes
+    Case UCase("yes")
+        ConvertLogicalValueToBoolean = True
+    ' convert to True if value is No
+    Case UCase("no")
+        ConvertLogicalValueToBoolean = False
+    ' convert to True if value is not Yes or No
+    Case Else
+        MsgBox "The logical value has to be either Yes or No, please retry."
+End Select
+End Function
+Function NoOfContiguousCell(rgInitialCell As Range, strOption As String)
+Dim rgCurrent As Range
+Set rgCurrent = rgInitialCell
+'check the no of contiguous columns on a tab
+NoOfContiguousCell = 0
+Select Case UCase(strOption)
+    Case UCase("row")
+        Do Until IsEmpty(rgCurrent)
+            NoOfContiguousCell = NoOfContiguousCell + 1
+            Set rgCurrent = rgCurrent.Offset(1, 0)
+        Loop
+    Case UCase("column")
+        Do Until IsEmpty(rgCurrent)
+            NoOfContiguousCell = NoOfContiguousCell + 1
+            Set rgCurrent = rgCurrent.Offset(0, 1)
+        Loop
+    Case Else
+        MsgBox "This option is not available, please select only ""row"" or ""column"" as option."
+End Select
+End Function
+Sub BlankDataRangeNormalization(rgDataRange As Range, Optional varReplacement As Variant)
+Dim rgCell As Range
+If Not IsMissing(varReplacement) Then
+    For Each rgCell In rgDataRange
+        If IsEmpty(rgCell) Then rgCell.Value = varReplacement
+    Next
+End If
+End Sub
+Function AllParser(MyTarget, MyDeliminator, MyPosition, MyEnding)
+On Error GoTo AllParserError1
+'Initializing varialbes
+Dim StartingPoint, StoppingPoint, MyDeliminatorCount, i
+
+StartingPoint = 1
+MyDeliminatorCount = 0
+i = 1
+'Loop through multi-selections
+Do While MyDeliminatorCount <> MyPosition
+    'Choose ending character
+    Select Case MyEnding
+        'No ending character
+        Case ""
+            'Loop through deliminator
+            Do While Mid(MyTarget, i, 1) <> MyDeliminator
+                If i > Len(MyTarget) Then Exit Do
+                i = i + 1
+            Loop
+        'Have ending character
+        Case Is <> ""
+            'Loop through deliminator
+            Do While Mid(MyTarget, i, 1) <> MyDeliminator And UCase(Mid(MyTarget, i, 1)) <> UCase(MyEnding)
+                If i > Len(MyTarget) Then Exit Do
+                i = i + 1
+            Loop
+    End Select
+    'Calculate counters
+    MyDeliminatorCount = MyDeliminatorCount + 1
+    i = i + 1
+    
+    'Set up starting points
+    Select Case True
+        Case MyPosition = 1
+            StartingPoint = 1
+        Case MyDeliminatorCount < MyPosition
+            StartingPoint = i
+    End Select
+Loop
+
+'Parser target string
+AllParser = Mid(MyTarget, StartingPoint, i - StartingPoint - 1)
+
+Exit Function
+AllParserError1:
+AllParser = "Please check with your administrator!"
+End Function
+Sub InsertSpace(rgMyRange As Range, strOption As String)
+' define range to be inserted by row/column
+Select Case UCase(strOption)
+    Case UCase("row")
+        Rows(rgMyRange.Row).Insert Shift:=xlDown
+    Case UCase("Column")
+        Columns(rgMyRange.Column).Insert Shift:=xlRight
+    Case Else
+        MsgBox "option not defined, please try again"
+End Select
+End Sub
+Sub DeleteDataRange(rgCurrent As Range, strOption As String)
+' define range to be deleted by row/column
+Select Case UCase(strOption)
+    Case UCase("Row")
+        rgCurrent.Rows.EntireRow.Delete
+    Case UCase("column")
+        rgCurrent.Columns.EntireColumn.Delete
+End Select
+End Sub
+Sub ApplyNumberFormat(rgCurrent As Range, intMyOption As Integer)
+'set up number format
+Select Case intMyOption
+    'with 1 decimal point
+    Case 1
+        rgCurrent.NumberFormat = "#,##0.0_);[Red] (#,##0.0);0.0_);"
+    'with 2 decimal point
+    Case 2
+        rgCurrent.NumberFormat = "#,##0.00_);[Red] (#,##0.00);0.00_);"
+End Select
+End Sub
+Function DatasetObjectType(wscurrent As Worksheet, strObjectType As String, intObjectNo As Integer) As Boolean
+'check data object type: Querytable or Pivottable
+Select Case UCase(strObjectType)
+    ' check for Querytable
+    Case UCase("querytable")
+        If wscurrent.QueryTables.Count >= intObjectNo Then
+            DatasetObjectType = True
+        Else
+            DatasetObjectType = False
+        End If
+    ' check for Pivottable
+    Case UCase("pivottable")
+        If wscurrent.PivotTables.Count >= intObjectNo Then
+            DatasetObjectType = True
+        Else
+            DatasetObjectType = False
+        End If
+    Case Else
+        MsgBox "Data object type name is not correct, please try again.", , "Data Object Type Identification Tool"
+End Select
+End Function
+
+Function PivotFieldType(pvtCurrent As PivotTable, strFieldType As String, strFieldName As String) As Boolean
+Dim pvtField As PivotField
+' check the pivot field type:
+Select Case UCase(strFieldType)
+    ' 1. page fields
+    Case UCase("pagefield")
+        For Each pvtField In pvtCurrent.PageFields
+            If StrComp(strFieldName, pvtField.Name, vbTextCompare) = 0 Then
+                'if field exists, return True
+                PivotFieldType = True
+                Exit Function
+            End If
+        Next
+        'if field does not exist, return false
+        PivotFieldType = False
+    ' 2. Row fields
+    Case UCase("rowfield")
+        For Each pvtField In pvtCurrent.RowFields
+            If StrComp(strFieldName, pvtField.Name, vbTextCompare) = 0 Then
+                'if field exists, return True
+                PivotFieldType = True
+                Exit Function
+            End If
+        Next
+        'if field does not exist, return false
+        PivotFieldType = False
+    ' 3. Column fields
+    Case UCase("columnfield")
+        For Each pvtField In pvtCurrent.ColumnFields
+            If StrComp(strFieldName, pvtField.Name, vbTextCompare) = 0 Then
+                'if field exists, return True
+                PivotFieldType = True
+                Exit Function
+            End If
+        Next
+        'if field does not exist, return false
+        PivotFieldType = False
+    ' 4. data fields
+    Case UCase("datafield")
+        For Each pvtField In pvtCurrent.DataFields
+            If StrComp(strFieldName, pvtField.Name, vbTextCompare) = 0 Then
+                'if field exists, return True
+                PivotFieldType = True
+                Exit Function
+            End If
+        Next
+        'if field does not exist, return false
+        PivotFieldType = False
+    ' 5. return error message
+    Case Else
+        MsgBox "Can not find this pivot field type, please try again."
+End Select
+
+End Function
+' test whether pivot field is displaying details
+Function testPivotTableFieldDetail(pvtfldCurrent As PivotField, MyOption As String) As Boolean
+Dim pvtitmCurrent As PivotItem, intCounter As Integer
+
+'initialize values
+intCounter = 0
+
+
+'loop through each pivot item in current pivot field
+For Each pvtitmCurrent In pvtfldCurrent.PivotItems
+    'if detail is not hid, then return value as true
+    If pvtitmCurrent.ShowDetail Then
+        intCounter = intCounter + 1
+        Exit For
+    End If
+Next
+' return function value based on options
+Select Case UCase(MyOption)
+    ' checking for "has detail"
+    Case UCase("has detail")
+        If intCounter > 0 Then
+            testPivotTableFieldDetail = True
+        Else
+            testPivotTableFieldDetail = False
+        End If
+    ' checking for "has no details"
+    Case UCase("has no detail")
+        If intCounter > 0 Then
+            testPivotTableFieldDetail = False
+        Else
+            testPivotTableFieldDetail = True
+        End If
+    ' checking for invalid options
+    Case Else
+        MsgBox ("This option is not valide, please try again.")
+End Select
+
+End Function
+
+' date/time variance per inclusine or exclusive
+Function ReturnDateVariance(strInterval As String, dtNow As Date, dtFuture As Date, Optional varType As Variant)
+
+' calcuate date difference
+Select Case UCase(strInterval)
+    Case UCase("year")
+       ReturnDateVariance = DateDiff("yyyy", dtNow, dtFuture)
+    Case UCase("quarter")
+       ReturnDateVariance = DateDiff("q", dtNow, dtFuture)
+    Case UCase("month")
+       ReturnDateVariance = DateDiff("m", dtNow, dtFuture)
+    Case UCase("day of year")
+       ReturnDateVariance = DateDiff("y", dtNow, dtFuture)
+    Case UCase("day")
+       ReturnDateVariance = DateDiff("d", dtNow, dtFuture)
+    Case UCase("hour")
+       ReturnDateVariance = DateDiff("h", dtNow, dtFuture)
+    Case Else
+        MsgBox "The choices for time interval are: year, quarter, month, day and hour. Please try again."
+End Select
+
+' if type is specified:
+' calcuate date variance per variance type: difference (exclusive) or elapased (inclusive)
+If Not IsMissing(varType) Then
+    Select Case UCase(CStr(varType))
+        Case UCase("exclusive")
+            ReturnDateVariance = ReturnDateVariance
+        Case UCase("inclusive")
+            ReturnDateVariance = ReturnDateVariance + 1
+        Case Else
+            MsgBox "The choices for type are: Difference, Elapsed." & vbCrLf & vbCrLf & _
+            "Please try again."
+    End Select
+End If
+
+            
+End Function
+Function ReturnDateElapsed(dtNow As Date, dtFuture As Date, Optional varType As Variant, Optional varNoOfHoliday As Variant)
+Dim dtDate As Date
+' calcuate date difference
+ReturnDateElapsed = 0
+
+For dtDate = dtNow To dtFuture
+    ' if type is specified:
+    ' calcuate date variance per variance type: net working days (exclusive) or all days (inclusive)
+    If Not IsMissing(varType) And UCase(CStr(varType)) = UCase("exclusive") Then
+        If Weekday(dtDate) <> vbSunday And Weekday(dtDate) <> vbSaturday Then
+            ReturnDateElapsed = ReturnDateElapsed + 1
+        End If
+    ' returen the no of days without condition
+    Else
+        ReturnDateElapsed = ReturnDateElapsed + 1
+    End If
+Next
+          
+' subtract holiday
+If Not IsMissing(varNoOfHoliday) And CSng(varNoOfHoliday) <= ReturnDateElapsed Then
+    ReturnDateElapsed = ReturnDateElapsed - CSng(varNoOfHoliday)
+End If
+
+End Function
+
+Sub PopulateAuditTrail(wscurrent As Worksheet, intOption As Integer)
+Dim rgCurrent(1 To 2) As Range, intCounter As Integer, intBatchNo As Integer, intThresholdNo As Integer
+' set up primary cell
+Set rgCurrent(1) = wscurrent.Cells(2, 1)
+' initialize variables
+intCounter = 0
+intThresholdNo = 2000
+
+' loop through cells per threshold no
+Do While True
+    ' set up counter
+    intCounter = intCounter + 1
+    ' set up batch no
+    intBatchNo = rgCurrent(1)
+    ' if exceed treshold then exit
+    If intCounter > intThresholdNo Then Exit Do
+    ' set up secondary cell
+    Set rgCurrent(2) = rgCurrent(1).Offset(1, 0)
+    ' evaluate primary/secondary cells
+    Select Case True
+        ' if both are not empty
+        Case Not IsEmpty(rgCurrent(1)) And Not IsEmpty(rgCurrent(2))
+            ' if they don't match, increment primary cell by 1, exit
+            If rgCurrent(1) <> rgCurrent(2) Then
+                Set rgCurrent(1) = rgCurrent(2)
+                Exit Do
+            End If
+        ' if primary is valid/secondary is empty,
+        Case Not IsEmpty(rgCurrent(1)) And IsEmpty(rgCurrent(2))
+            ' if counter is equal to treshhold no
+            If intCounter = intThresholdNo Then
+                ' if option is 1 (log in time) start over at top and increment batch no by 1, exit
+                If intOption = 1 Then
+                    intBatchNo = intBatchNo + 1
+                    Set rgCurrent(1) = wscurrent.Cells(2, 1)
+                    Exit Do
+                ' if option is not 1, exit
+                Else
+                    Exit Do
+                End If
+            'if counter is not equal to treshhold, increment primary cell by 1, exit
+            Else
+                Set rgCurrent(1) = rgCurrent(2)
+                Exit Do
+            End If
+        ' if primary is empty/secondary is valid, update primary cell with secondary
+        Case IsEmpty(rgCurrent(1)) And Not IsEmpty(rgCurrent(2))
+            rgCurrent(1) = rgCurrent(2)
+        ' if both are empty, exit
+        Case IsEmpty(rgCurrent(1)) And IsEmpty(rgCurrent(2))
+            intBatchNo = 1
+            intCounter = 1
+            intThresholdNo = 1
+            Exit Do
+    End Select
+    ' increment primary cell by 1, exit
+    Set rgCurrent(1) = rgCurrent(2)
+Loop
+
+       
+' populate cells: user name, log in/out time
+Select Case intOption
+    ' user name /log in time
+    Case 1
+        rgCurrent(1) = intBatchNo
+        rgCurrent(1).Offset(0, 1) = Application.UserName
+        rgCurrent(1).Offset(0, 2) = Now()
+        ThisWorkbook.Save
+    'log out time
+    Case 0
+        ' if counter is equal to thresh hold no
+        If intCounter = intThresholdNo Then
+            rgCurrent(1).Offset(0, 3) = Now()
+            ThisWorkbook.Save
+        ' if they are not equal
+        Else
+           rgCurrent(1).Offset(-1, 3) = Now()
+           ThisWorkbook.Save
+        End If
+    Case Else
+        MsgBox "This option is not valid, please contact system admin."
+End Select
+End Sub
+Sub Tab_Protect(wsInput As Worksheet)
+    On Error Resume Next
+    Dim strP As String
+    strP = "gsaapp"
+    wsInput.Protect AllowFormattingCells:=True, AllowFormattingRows:=True, _
+        AllowInsertingRows:=True, AllowDeletingRows:=True, AllowSorting:=True, _
+        AllowFiltering:=True, Password:=strP
+End Sub
+Sub Tab_Unprotect(wsInput As Worksheet)
+    On Error Resume Next
+    Dim strP As String
+    strP = "gsaapp"
+    wsInput.Unprotect Password:=strP
+End Sub
+
+Sub Protect_Unprotect_Src_Tab()
+
+    Dim strTemp As String, j As Long, i As Long, strTabName() As String
+    Dim ws As Worksheet, strYN As String
+    
+    j = 9
+    ' set tab protection Y -> protect, N -> unprotect
+    strYN = "y"
+    
+    strTemp = "wsSrcData_"
+     
+    ReDim strTabName(1 To j)
+     
+    For i = 1 To j
+        strTabName(i) = strTemp & i
+        'Debug.Print strTabName(i)
+    Next
+    
+    
+    Select Case True
+        Case StrComp(strYN, "Y", vbTextCompare) = 0
+            For i = 1 To UBound(strTabName)
+                Set ws = setWorksheetByCodeName(ThisWorkbook, strTabName(i))
+                Tab_Protect ws
+            Next
+            MsgBox UBound(strTabName) & " tabs are protected"
+        Case StrComp(strYN, "N", vbTextCompare) = 0
+            For i = 1 To UBound(strTabName)
+                Set ws = setWorksheetByCodeName(ThisWorkbook, strTabName(i))
+                Tab_Unprotect ws
+            Next
+            MsgBox UBound(strTabName) & " tabs are unprotected"
+    End Select
+End Sub
+
+Sub extractFormula(rgInput As Range, strConfig As String)
+Dim ws As Worksheet, strLn() As String
+Dim cfg As clsConfig
+
+Set cfg = New clsConfig
+
+strLn = Split(cfg.getConfigInfo(strConfig), ",")
+
+rgInput.Formula = strLn
+
+End Sub
+
+Function formulaConcat(rgInput As Range, strDelimiter As String) As String
+    Dim rg As Range, strTemp As String
+    
+    For Each rg In rgInput
+        strTemp = strTemp & showFormula(rg) & strDelimiter
+                
+    Next
+    'Debug.Print strTemp
+    
+    formulaConcat = Left(strTemp, Len(strTemp) - 1)
+ 
+End Function
+
+Public Function showFormula(cell As Range) As String
+    showFormula = cell.Formula
+End Function
+
+Sub extracTabNames()
+Dim ws As Worksheet
+
+For Each ws In ThisWorkbook.Worksheets
+
+    Debug.Print ws.CodeName
+Next
+
+End Sub
+
+Sub extract_TabCodeName()
+Dim ws As Worksheet
+
+For Each ws In ThisWorkbook.Worksheets
+    Debug.Print ws.CodeName
+Next
+
+
+End Sub
+Function getFolderName(strDefaultDir As String) As String
+    Dim fldr As FileDialog
+    Dim sItem As String
+    Set fldr = Application.FileDialog(msoFileDialogFolderPicker)
+    
+    ' check the whether folder exits or not
+    If Not FolderOrFileExists(strDefaultDir, "folder") Then
+        MsgBox "The folder directory doesn't exist, try again"
+    End If
+    
+    With fldr
+        .Title = "Select a Folder"
+        .AllowMultiSelect = False
+        .InitialFileName = strDefaultDir
+        If .Show = True Then
+            sItem = .SelectedItems(1)
+        End If
+    End With
+    getFolderName = sItem
+    Set fldr = Nothing
+End Function
+' check whether code name exists in the wb
+Function codename_exists(wb As Workbook, strCodeName As String) As Boolean
+    Dim ws As Worksheet
+    
+    For Each ws In wb.Worksheets
+        If StrComp(Trim(strCodeName), ws.CodeName, vbTextCompare) = 0 Then
+            codename_exists = True
+            Exit Function
+        End If
+    Next
+    codename_exists = False
+End Function
+' get all the visible ws codename and exclude exceptions
+Function get_WS_Codename_with_Exception(wb As Workbook, varTabToExclude As Variant, Optional varTabToInclude) As Variant
+    Dim ws As Worksheet, clWS As Collection, var As Variant, bl As Boolean
+    
+    Set clWS = New Collection
+    
+    'check all visible tabs
+    For Each ws In wb.Worksheets
+        If ws.Visible = True Then
+            bl = True
+            ' check for visible tab exceptions
+            For Each var In varTabToExclude
+                If StrComp(Trim(CStr(var)), Trim(ws.CodeName), vbBinaryCompare) = 0 Then
+                    bl = False
+                    Exit For
+                End If
+            Next
+            ' if the visible tab is not in exception,then capture it in the col
+            If bl = True Then
+                ' if the tab is not already captured, then add to col
+                If Not coll_key_exists(clWS, ws.CodeName) Then
+                    clWS.Add ws.CodeName, ws.CodeName
+                End If
+            End If
+        End If
+     Next
+    'Debug.Assert 1 = 1
+    ' for invisible tab to be included
+    If Not IsMissing(varTabToInclude) Then
+        For Each var In varTabToInclude
+            ' if the tab is not already captured and code name exists in the WB, then add to col
+            If Not coll_key_exists(clWS, Trim(CStr(var))) And codename_exists(ThisWorkbook, CStr(var)) Then
+                clWS.Add Trim(CStr(var)), Trim(CStr(var))
+            End If
+        Next
+    End If
+    'Debug.Print clWS.Count
+    'convert col to array
+    get_WS_Codename_with_Exception = Collection_To_Array(clWS)
+
+End Function
+' check whether collection key exists
+Function coll_key_exists(coll As Collection, key As String) As Boolean
+
+    On Error GoTo eh
+
+    coll.Item key
+    
+    coll_key_exists = True
+Exit Function
+eh:
+End Function
+' covert col to array
+Function Collection_To_Array(myCol As Collection) As Variant
+    Dim result  As Variant
+    Dim cnt     As Long
+
+    ReDim result(myCol.Count - 1)
+    For cnt = 0 To myCol.Count - 1
+        result(cnt) = myCol(cnt + 1)
+    Next cnt
+    
+    Collection_To_Array = result
+
+End Function
+Function WS_CodeName_To_TabName(wb As Workbook, varCodeName As Variant) As Variant
+    Dim ws As Worksheet, var As Variant
+    Dim strTabName As String, k As Long
+    
+    ' check whether code name is provided or not
+    If Not Array_has_element(varCodeName) Then
+        MsgBox "No code name is provided, please check."
+        Exit Function
+    End If
+    
+    ' loop through all worksheets to get ws name
+    For Each ws In ThisWorkbook.Worksheets
+        ' loop through all codenames
+        For k = LBound(varCodeName) To UBound(varCodeName)
+            ' check matching between ws name and codename
+            If StrComp(ws.CodeName, Trim(CStr(varCodeName(k))), vbBinaryCompare) = 0 Then
+                ' to start the placeholder
+                If Len(strTabName) = 0 Then
+                    strTabName = ws.Name
+                ' add to placeholder
+                Else
+                    strTabName = strTabName & "," & ws.Name
+                End If
+                Exit For
+            End If
+        Next
+    Next
+    ' convert all the ws name from text to array
+    WS_CodeName_To_TabName = Split(strTabName, ",")
+        
+End Function
+
+Function Array_has_element(var As Variant) As Boolean
+    ' when array is empty
+    If IsEmpty(var) Or varType(var) <> 8204 Then
+        Array_has_elements = False
+        Exit Function
+    End If
+    ' when array is not empty
+    Array_has_element = True
+        
+End Function
