@@ -1,0 +1,141 @@
+Private Sub cmdMake_Verification_File_Click()
+
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    
+    ' generic error hanlder switch: in PublicVar module
+    If gEnableErrorHandling Then On Error GoTo myErrHandler1
+    
+    Dim varTabAll As Variant, strFilePath As String, strFileNamePrefix As String, strFileName As String, strTabName As String
+    Dim varTabToExclude As Variant, varTabToInclude As Variant, varDelimiter As Variant, varConfig As Variant, var As Variant
+    Dim dteCurrent As Date, lngFileVersion As Long, i As Long, j As Long, k As Long
+    Dim ws As Worksheet, wbDest As Workbook
+    Dim cfg As clsConfig
+    
+    Set cfg = New clsConfig
+    
+    varConfig = Array("Ver_Tab_To_Exclude", "Ver_Tab_To_Include", "Ver_file_path")
+    varDelimiter = Array("|", ",", ":", ";", "_", ".")
+
+    
+    ' initialization
+    With cfg
+        'exclude visible/invisible tab
+        varTabToExclude = Split(.getConfigInfo(Trim(CStr(varConfig(0)))), CStr(varDelimiter(1)))
+        'include invisible tab
+        varTabToInclude = Split(.getConfigInfo(Trim(CStr(varConfig(1)))), CStr(varDelimiter(1)))
+        
+        
+         'set up default directory and file name info
+        strFilePath = .getConfigInfo(Trim(CStr(varConfig(2))))
+        strFilePath = getFolderName(strFilePath)
+        
+        ' check for blank file path
+        If Len(strFilePath) = 0 Then
+            MsgBox "The file path is blank, try again"
+            Exit Sub
+        Else
+            .letConfigInfo "Ver_file_path", strFilePath
+        End If
+        
+        ' show progress bar
+        Call frmProgressBar2.showProgressBar2
+        i = 1
+        j = 3
+        
+        i = 1
+        
+        ' update to the progress bar
+        Application.ScreenUpdating = True
+        Call frmProgressBar2.iterateProgressBar2(i, j)
+        Application.ScreenUpdating = False
+
+        
+        
+        strFileNamePrefix = .getConfigInfo("Ver_File_Name_Prefix")
+        dteCurrent = .getConfigInfo("Current_Date")
+        
+        ' for a new date, default ver no to 1, then increment by 1 each time
+        If dteCurrent <> Date Then
+            .letConfigInfo "current_date", Date
+            .letConfigInfo "ver_file_version", 1
+            lngFileVersion = 1
+        ' increment by 1
+        Else
+            lngFileVersion = .getConfigInfo("ver_file_version")
+            lngFileVersion = lngFileVersion + 1
+            .letConfigInfo "ver_file_version", lngFileVersion
+        End If
+                
+                
+                
+        i = i + 1
+        ' update to the progress bar
+        Application.ScreenUpdating = True
+        Call frmProgressBar2.iterateProgressBar2(i, j)
+        Application.ScreenUpdating = False
+
+        
+        ' get tab codename for visible tabs per exception condition: to exclude certain visible tab and to include certain invisible tab
+        varTabAll = get_WS_Codename_with_Exception(ThisWorkbook, varTabToExclude, varTabToInclude)
+        ' translate from ws codename to ws tabname
+        varTabAll = WS_CodeName_To_TabName(ThisWorkbook, varTabAll)
+        
+'        'check tab name
+'        For Each var In varTabAll
+'            Debug.Print var
+'        Next
+        
+        'select target sheets
+        If Not FolderOrFileExists(strFilePath, "folder") Then
+            MkDir strFilePath
+        End If
+        ChDir strFilePath
+        
+        
+        ' copy ver templates per exclusion/inclusion conditions
+        ThisWorkbook.Worksheets(varTabAll).Copy
+        
+        strFileName = strFileNamePrefix & Format(Date, " yyyymmdd ") & "V" & CStr(lngFileVersion) & ".xlsx"
+        
+        ' save the tempalte file as a copy and hide invisible tabs per varTabToInclude
+        With ActiveWorkbook
+            ' hide tabs per varTabToInclude
+            For Each ws In ActiveWorkbook.Worksheets
+                For Each var In varTabToInclude
+                    If StrComp(ws.CodeName, Trim(CStr(var)), vbTextCompare) = 0 Then
+                        ws.Visible = xlSheetVeryHidden
+                    End If
+                    Exit For
+                Next
+            Next
+            .SaveAs Filename:=strFilePath & "\" & strFileName, FileFormat:=xlOpenXMLWorkbook, CreateBackup:=False
+            .Close SaveChanges:=True
+        End With
+            
+    End With
+    
+    i = i + 1
+    ' update to the progress bar
+    Application.ScreenUpdating = True
+    Call frmProgressBar2.iterateProgressBar2(i, j)
+    Application.ScreenUpdating = False
+    
+    MsgBox "The verfication scheudle tempalte is saved to the following directory:" & vbCrLf & vbCrLf & strFilePath & vbCrLf & vbCrLf _
+    & "The file name is:" & vbCrLf & vbCrLf & strFileName
+    
+    Set cfg = Nothing
+    
+    ' unload progress bar
+    Call frmProgressBar2.unloadProgressBar2
+    
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+
+Exit Sub
+myErrHandler1:
+    MsgBox "Error " & Err.Number & ": " & Err.Description & vbCrLf & " Caller: " & Application.VBE.ActiveCodePane.CodeModule, vbCritical, "Error"
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+
+End Sub
