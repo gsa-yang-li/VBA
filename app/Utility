@@ -1238,7 +1238,7 @@ Function codename_exists(wb As Workbook, strCodeName As String) As Boolean
     Next
     codename_exists = False
 End Function
-' get all the visible ws codename and exclude exceptions
+' get all the visible ws codename by default, excluding certain visible tab and including certain invisible tab
 Function get_WS_Codename_with_Exception(wb As Workbook, varTabToExclude As Variant, Optional varTabToInclude) As Variant
     Dim ws As Worksheet, clWS As Collection, var As Variant, bl As Boolean
     
@@ -1290,7 +1290,7 @@ Function coll_key_exists(coll As Collection, key As String) As Boolean
 Exit Function
 eh:
 End Function
-' covert col to array
+' covert collection to array
 Function Collection_To_Array(myCol As Collection) As Variant
     Dim result  As Variant
     Dim cnt     As Long
@@ -1303,6 +1303,7 @@ Function Collection_To_Array(myCol As Collection) As Variant
     Collection_To_Array = result
 
 End Function
+' extrac WS tabname per codename
 Function WS_CodeName_To_TabName(wb As Workbook, varCodeName As Variant) As Variant
     Dim ws As Worksheet, var As Variant
     Dim strTabName As String, k As Long
@@ -1334,7 +1335,7 @@ Function WS_CodeName_To_TabName(wb As Workbook, varCodeName As Variant) As Varia
     WS_CodeName_To_TabName = Split(strTabName, ",")
         
 End Function
-
+'check whether element exists in array
 Function Array_has_element(var As Variant) As Boolean
     ' when array is empty
     If IsEmpty(var) Or varType(var) <> 8204 Then
